@@ -1,13 +1,15 @@
 package com.example.facemeshrecognition
 
 import android.annotation.SuppressLint
-import android.graphics.ImageFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
+import android.graphics.*
+import android.graphics.ImageFormat.NV21
 import android.media.Image
+import android.util.Log
 import androidx.camera.core.ImageProxy
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
+
 
 @SuppressLint("UnsafeOptInUsageError")
 fun ImageProxy.toYUV(): YuvImage? {
@@ -23,11 +25,117 @@ fun ImageProxy.toYUV(): YuvImage? {
     return yuvImage
 }
 
+@SuppressLint("UnsafeOptInUsageError")
+fun ImageProxy.toImageBuffer(): ByteBuffer? {
+    val image = this.image ?: return null
+    val imageBuffer = image.planes?.toNV21(this.width, this.height)
+    image.close()
+    return imageBuffer
+}
+
+@SuppressLint("UnsafeOptInUsageError")
+fun ImageProxy.toImage(): Image? {
+    val image = this.image ?: return null
+    image.close()
+    return image
+}
+
+fun Image.toBitmap(){
+    val imageBuffer = this.planes?.toNV21(this.width, this.height)
+
+}
+
+fun ImageProxy.toYuvImage(image: Image): YuvImage? {
+    require(!(image.format !== ImageFormat.YUV_420_888)) { "Invalid image format" }
+    val yBuffer = image.planes[0].buffer
+    val uBuffer = image.planes[1].buffer
+    val vBuffer = image.planes[2].buffer
+    val ySize = yBuffer.remaining()
+    val uSize = uBuffer.remaining()
+    val vSize = vBuffer.remaining()
+    val nv21 = ByteArray(ySize + uSize + vSize)
+
+    // U and V are swapped
+    yBuffer[nv21, 0, ySize]
+    vBuffer[nv21, ySize, vSize]
+    uBuffer[nv21, ySize + vSize, uSize]
+    val width = image.width
+    val height = image.height
+    return YuvImage(nv21, NV21, width, height,  /* strides= */null)
+}
+
+
+
+//fun process(imageProxy: ImageProxy): ByteBuffer {
+//    lateinit var streams: ByteBuffer
+//    CoroutineScope(Dispatchers.IO).launch {
+//        val yuv = imageProxy.toYUV()
+//        val stream = ByteArrayOutputStream()
+//        yuv!!.compressToJpeg(Rect(0, 0, imageProxy.width, imageProxy.height), 80, stream)
+//        streams = ByteBuffer.wrap(stream.toByteArray())
+//    }
+//    return streams
+//}
+
 fun ImageProxy.toJpeg(compressionQuality: Int = 80): ByteBuffer? {
     val yuv = this.toYUV() ?: return null
     val stream = ByteArrayOutputStream()
-    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
+//    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
     return ByteBuffer.wrap(stream.toByteArray())
+}
+
+fun ImageProxy.toBitmap(compressionQuality: Int = 80): Bitmap? {
+//    val yuv = this.toYUV() ?: return null
+    val stream = ByteArrayOutputStream()
+//    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
+    val bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.size());
+    return bmp
+}
+
+fun ByteArray.decodeToBitMap(): Bitmap? {
+    var bmp: Bitmap? = null
+    try {
+        val image = YuvImage(this, ImageFormat.NV21, 640, 480, null)
+        if (image != null) {
+            Log.d("Yes", "image != null")
+            val stream = ByteArrayOutputStream()
+            image.compressToJpeg(Rect(0, 0, 640, 480), 50, stream)
+            bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.toByteArray().size)
+            stream.close()
+        }
+    } catch (ex: java.lang.Exception) {
+        Log.e("No", "Error:" + ex.message)
+    }
+    return bmp
+}
+
+fun YuvImage.decodeToBitMap(image: YuvImage): Bitmap? {
+    var bmp: Bitmap? = null
+    try {
+//        val image = YuvImage(this, ImageFormat.NV21, 640, 480, null)
+        if (image != null) {
+            Log.d("Yes", "image != null")
+            val stream = ByteArrayOutputStream()
+            image.compressToJpeg(Rect(0, 0, image.width, image.height), 80, stream)
+            bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.toByteArray().size)
+            stream.close()
+        }
+    } catch (ex: java.lang.Exception) {
+        Log.e("No", "Error:" + ex.message)
+    }
+    return bmp
+}
+
+fun YuvImage.convertYuvImageToBitmap(yuvImage: YuvImage): Bitmap? {
+    val out = ByteArrayOutputStream()
+    yuvImage.compressToJpeg(Rect(0, 0, yuvImage.width, yuvImage.height), 100, out)
+    val imageBytes = out.toByteArray()
+    try {
+        out.close()
+    } catch (e: IOException) {
+        Log.e("No", "Exception while closing output stream", e)
+    }
+    return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 }
 
 fun Array<Image.Plane>.toNV21(width: Int, height: Int): ByteBuffer {
@@ -94,5 +202,91 @@ fun ByteBuffer.toByteArray(): ByteArray {
         return bytes
     } catch (e: Exception) {
         return ByteArray(0)
+    }
+}
+
+@SuppressLint("UnsafeOptInUsageError")
+fun ImageProxy.getByteArray(image: ImageProxy): ByteArray? {
+    image.image?.let {
+        val nv21Buffer = yuv420ThreePlanesToNV21(
+            it.planes, image.width, image.height
+        )
+
+        return ByteArray(nv21Buffer.remaining()).apply {
+            nv21Buffer.get(this)
+        }
+    }
+
+    return null
+}
+
+private fun yuv420ThreePlanesToNV21(
+    yuv420888planes: Array<Image.Plane>,
+    width: Int,
+    height: Int
+): ByteBuffer {
+    val imageSize = width * height
+    val out = ByteArray(imageSize + 2 * (imageSize / 4))
+    if (areUVPlanesNV21(yuv420888planes, width, height)) {
+
+        yuv420888planes[0].buffer[out, 0, imageSize]
+        val uBuffer = yuv420888planes[1].buffer
+        val vBuffer = yuv420888planes[2].buffer
+        vBuffer[out, imageSize, 1]
+        uBuffer[out, imageSize + 1, 2 * imageSize / 4 - 1]
+    } else {
+        unpackPlane(yuv420888planes[0], width, height, out, 0, 1)
+        unpackPlane(yuv420888planes[1], width, height, out, imageSize + 1, 2)
+        unpackPlane(yuv420888planes[2], width, height, out, imageSize, 2)
+    }
+    return ByteBuffer.wrap(out)
+}
+
+private fun areUVPlanesNV21(planes: Array<Image.Plane>, width: Int, height: Int): Boolean {
+    val imageSize = width * height
+    val uBuffer = planes[1].buffer
+    val vBuffer = planes[2].buffer
+
+    val vBufferPosition = vBuffer.position()
+    val uBufferLimit = uBuffer.limit()
+
+    vBuffer.position(vBufferPosition + 1)
+    uBuffer.limit(uBufferLimit - 1)
+
+    val areNV21 =
+        vBuffer.remaining() == 2 * imageSize / 4 - 2 && vBuffer.compareTo(uBuffer) == 0
+
+    vBuffer.position(vBufferPosition)
+    uBuffer.limit(uBufferLimit)
+    return areNV21
+}
+
+private fun unpackPlane(
+    plane: Image.Plane,
+    width: Int,
+    height: Int,
+    out: ByteArray,
+    offset: Int,
+    pixelStride: Int
+) {
+    val buffer = plane.buffer
+    buffer.rewind()
+    val numRow = (buffer.limit() + plane.rowStride - 1) / plane.rowStride
+    if (numRow == 0) {
+        return
+    }
+    val scaleFactor = height / numRow
+    val numCol = width / scaleFactor
+
+    var outputPos = offset
+    var rowStart = 0
+    for (row in 0 until numRow) {
+        var inputPos = rowStart
+        for (col in 0 until numCol) {
+            out[outputPos] = buffer[inputPos]
+            outputPos += pixelStride
+            inputPos += plane.pixelStride
+        }
+        rowStart += plane.rowStride
     }
 }

@@ -5,21 +5,15 @@ import android.graphics.*
 import android.util.Size
 import androidx.appcompat.widget.AppCompatImageView
 import com.google.common.collect.ImmutableSet
-import com.google.mediapipe.formats.proto.LandmarkProto
 import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmark
 import com.google.mediapipe.solutions.facemesh.FaceMesh
 import com.google.mediapipe.solutions.facemesh.FaceMeshConnections
 import com.google.mediapipe.solutions.facemesh.FaceMeshResult
-import dagger.Provides
 import javax.inject.Singleton
 
 @Singleton
 class FaceMeshResultImageView(context: Context?) : AppCompatImageView(context) {
     private lateinit var latest: Bitmap
-
-    init {
-//        scaleType = AppCompatIma
-    }
 
     /**
      * Sets a [FaceMeshResult] to render.

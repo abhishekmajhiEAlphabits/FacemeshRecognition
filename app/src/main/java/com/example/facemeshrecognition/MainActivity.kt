@@ -3,9 +3,7 @@ package com.example.facemeshrecognition
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.SurfaceTexture
+import android.graphics.*
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
@@ -18,6 +16,7 @@ import android.util.Range
 import android.util.Size
 import android.view.View
 import android.widget.*
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.CaptureRequestOptions
@@ -29,7 +28,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.mediapipe.components.TextureFrameConsumer
 import com.google.mediapipe.formats.proto.LandmarkProto
+import com.google.mediapipe.framework.TextureFrame
+import com.google.mediapipe.solutioncore.CameraInput
 import com.google.mediapipe.solutions.facemesh.FaceMesh
 import com.google.mediapipe.solutions.facemesh.FaceMeshOptions
 import com.google.mediapipe.solutions.facemesh.FaceMeshResult
@@ -46,8 +48,14 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
-    private var iWidth: Int? = null
-    private var iHeight: Int? = null
+//    private lateinit var planesObj: Planes
+//    private var cameraInput: CameraInput? = null
+//
+//    private lateinit var planeY: PlaneY
+//    private lateinit var planeU: PlaneU
+//    private lateinit var planeV: PlaneV
+//    private var iWidth: Int? = null
+//    private var iHeight: Int? = null
 
     private var facemesh: FaceMesh? = null
     private var imageView: FaceMeshResultImageView? = null
@@ -59,24 +67,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var frameLayout: FrameLayout
     private lateinit var btnStartScan: Button
 
-//    private val cameraOut = Channel<ByteBuffer>(Channel.BUFFERED)
-//    private val out: Flow<ByteBuffer> = cameraOut.receiveAsFlow()
+    private val cameraOut = Channel<ByteBuffer>(Channel.BUFFERED)
+    private val out: Flow<ByteBuffer> = cameraOut.receiveAsFlow()
 
-    private val cameraOut = Channel<ByteArray>(Channel.BUFFERED)
-    private val out: Flow<ByteArray> = cameraOut.receiveAsFlow()
+//    private val cameraOut = Channel<Array<ByteBuffer>>(Channel.BUFFERED)
+//    private val out: Flow<Array<ByteBuffer>> = cameraOut.receiveAsFlow()
     private var outStreamJob: Job? = null
     private val executor = Executors.newSingleThreadExecutor()
 
     private val imageAnalysisBuilder = ImageAnalysis.Builder()
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+//        .setTargetResolution(Size(640,480))
 
     var frameCounter = 0
     var lastFpsTimestamp = System.currentTimeMillis()
     var array: ByteArray? = null
-
-//    @Inject
-//    lateinit var camera: CameraStream
-
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         imageView = FaceMeshResultImageView(applicationContext)
         frameLayout = findViewById<FrameLayout>(R.id.preview_display_layout)
         cameraView = findViewById(R.id.cameraImage)
+
 //        btnStartScan = findViewById(R.id.startScanBtn)
 //        camera = CameraStream(applicationContext)
 
@@ -104,49 +110,32 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.Default).launch {
 
             outStreamJob?.cancel()
-            outStreamJob = out.onEach { bytes ->
+            outStreamJob = out.onEach { byteBuffer ->
 
+                val imageBytes = ByteArray(byteBuffer!!.remaining())
+                byteBuffer!!.get(imageBytes)
+                val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+//                val bmp = yuv.decodeToBitMap(yuv)
 //                val bmp = imageBytes.image
 //                Log.d(TAG,"byte : $imageBytes")
 //                setUpStreaming(bmp)
                 withContext(Dispatchers.Main) {
-//                    val byteBuffer = ByteBuffer.wrap(bytes)
-//                    val imageBytes = ByteArray(byteBuffer!!.remaining())
-////                    byteBuffer!!.get(imageBytes)
-                    val bmp = bytes.decodeToBitMap()
                     if (bmp != null) {
                         setUpStreaming(bmp!!)
-//                        cameraView.setImageBitmap(bmp)
+//                    cameraView.setImageBitmap(bmp)
                     }
-//                    if (bmp == null) {
-//                        Log.d(TAG, "bmp : bitmap null")
-//                    }
-
                 }
             }.launchIn(lifecycleScope)
         }
     }
 
-    //returns image byte array
-    fun imageProxyToByteArray(image: ImageProxy): ByteArray {
-        val buffer = image.planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-        return bytes
-    }
-
-    private fun imageProxyToBitmap(image: ImageProxy): Bitmap {
-        val buffer: ByteBuffer = image.planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    }
-
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
     private fun init() {
         processCameraProviderFuture = ProcessCameraProvider.getInstance(this)
         processCameraProvider = processCameraProviderFuture.get()
         setupCamera()
+
 
         // Initializes a new MediaPipe Face Mesh solution instance in the streaming mode.
         facemesh = FaceMesh(
@@ -177,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         imageView!!.rotation = 90F
         imageView!!.scaleX = -1F
 
+
     }
 
     fun startScanning(view: View) {
@@ -188,7 +178,7 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnsafeOptInUsageError")
     private fun setupCamera() {
         val imageAnalysis = imageAnalysisBuilder!!.build()
@@ -211,10 +201,10 @@ class MainActivity : AppCompatActivity() {
             SurfaceTexture::class.java
         )
         for (i in 0 until sizes.size) {
-           var result = sizes[i]
+            var result = sizes[i]
             Log.i(
                 "abhi",
-                "Supported Size. Width: " + result.width.toString() + "height : " + result.height
+                "Supported Size. Width: " + result.width.toString() + " height : " + result.height
             )
         }
 //        Log.d("abhi", "$sizes")
@@ -242,6 +232,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnsafeOptInUsageError")
     private fun cameraPreviewCallBack(imageAnalysis: ImageAnalysis) {
         var imageUtil = Util()
@@ -261,12 +252,70 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     try {
-                        val img = image.toByteArray()
-//                        val img = image.toYuvImage(image.image!!)
-                        CoroutineScope(Dispatchers.IO).launch {
 
-                            Log.d(TAG, "bytearray : $img")
-                            cameraOut.send(img ?: throw Throwable("Couldn't get JPEG image"))
+//                        val img = image.getByteArray(image)
+//                        Log.d("sam", "${image.image!!.width} :: ${image!!.image!!.height}")
+//                        val img = image.image
+                        val img = image.toJpeg()
+//                        val img = image.toYUV()
+
+
+//                        planeY.buffer = image.image!!.planes[0].buffer;
+//                        planeU.buffer = image.image!!.planes[1].buffer;
+//                        planeV.buffer = image.image!!.planes[2].buffer;
+//                        planeY.rowStride = image.image!!.planes[0].rowStride;
+//                        planeU.rowStride = image.image!!.planes[1].rowStride;
+//                        planeV.rowStride = image.image!!.planes[2].rowStride;
+//                        planeY.pixelStride = image.image!!.planes[0].pixelStride;
+//                        planeU.pixelStride = image.image!!.planes[1].pixelStride;
+//                        planeV.pixelStride = image.image!!.planes[2].pixelStride;
+
+//                        var y = image.image!!.planes[0].buffer;
+//                        var u = image.image!!.planes[1];
+//                        var v = image.image!!.planes[2];
+
+//                        val y = image.image!!.planes[0].buffer;
+//                        val u = image.image!!.planes[1].buffer;
+//                        val v = image.image!!.planes[2].buffer;
+//                        var planeListArray = arrayOf(y, u, v)
+
+
+//                        val buffer = image.planes[0].buffer
+//                        val bytes = ByteArray(buffer.remaining())
+//                        buffer.get(bytes)
+//                        CoroutineScope(Dispatchers.Main).launch {
+////                            var bitmap = BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+//                            cameraView.setImageBitmap(bitmap)
+//                        }
+//                        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+
+
+//                        var plane : Array<Image.Plane> = image.image!!.planes;
+//                        val yuv = image.toYUV()
+//                        Log.d("test","Test ${image.width} ${image.height}");
+
+
+                        /**
+                         * Option 2
+                         */
+//                        var bitmapBuffer : Bitmap = Bitmap.createBitmap(image.width,image.height,Bitmap.Config.ARGB_8888);
+//                        bitmapBuffer.copyPixelsFromBuffer(image.image!!.planes[0].buffer);
+
+
+//                        val img = image.toYuvImage(image.image!!)
+//                        val img = image.toByteArray()
+
+//                        var base64value : String = Base64.encodeToString(img, Base64.DEFAULT);
+
+                        CoroutineScope(Dispatchers.IO).launch {
+//                            val bitmapImage = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+//                            Log.d("hardik","Receive data");
+//                            val bmp = img.decodeToBitMap()
+
+//                            Log.d(TAG, "bytearray : $img")
+                            cameraOut.send(
+                                img ?: throw Throwable("Couldn't get JPEG image")
+                            )
                         }
 
                     } catch (t: Throwable) {
@@ -277,15 +326,6 @@ class MainActivity : AppCompatActivity() {
 //                image.close()
             })
         }, executor)
-    }
-
-
-    private fun imageProcess(image: ImageProxy): ByteBuffer {
-        lateinit var buffer: ByteBuffer
-        image.use {
-            buffer = image.toJpeg()!!
-        }
-        return buffer
     }
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {

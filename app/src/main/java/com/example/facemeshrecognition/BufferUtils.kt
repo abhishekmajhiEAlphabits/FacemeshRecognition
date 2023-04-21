@@ -3,7 +3,12 @@ package com.example.facemeshrecognition
 import android.annotation.TargetApi
 import android.media.Image.Plane
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
 
 object BufferUtils {
     /**
@@ -68,6 +73,40 @@ object BufferUtils {
                 inputPos += plane.pixelStride
             }
             rowStart += plane.rowStride
+        }
+
+    }
+
+    fun unpackPlanes(
+        planeBuffer: ByteBuffer,
+        planeRowStride: Int,
+        planePixelStride: Int,
+//        plane: Plane,
+        width: Int, height: Int, out: ByteArray, offset: Int, pixelStride: Int
+    ) {
+        val buffer = planeBuffer
+        buffer.rewind()
+
+        // Compute the size of the current plane.
+        // We assume that it has the aspect ratio as the original image.
+        val numRow = (buffer.limit() + planeRowStride - 1) / planeRowStride
+        if (numRow == 0) {
+            return
+        }
+        val scaleFactor = height / numRow
+        val numCol = width / scaleFactor
+
+        // Extract the data in the output buffer.
+        var outputPos = offset
+        var rowStart = 0
+        for (row in 0 until numRow) {
+            var inputPos = rowStart
+            for (col in 0 until numCol) {
+                out[outputPos] = buffer[inputPos]
+                outputPos += pixelStride
+                inputPos += planePixelStride
+            }
+            rowStart += planeRowStride
         }
     }
 }

@@ -14,6 +14,7 @@ import java.nio.ByteBuffer
 @SuppressLint("UnsafeOptInUsageError")
 fun ImageProxy.toYUV(): YuvImage? {
     val image = this.image ?: return null
+
     val imageBuffer = image.planes?.toNV21(this.width, this.height)
     val yuvImage = YuvImage(
         imageBuffer?.toByteArray(),
@@ -42,7 +43,7 @@ fun ImageProxy.toImage(): Image? {
 
 fun Image.toBitmap(){
     val imageBuffer = this.planes?.toNV21(this.width, this.height)
-
+//    Log.d("ram","$this.width :: $this.height")
 }
 
 fun ImageProxy.toYuvImage(image: Image): YuvImage? {
@@ -80,7 +81,8 @@ fun ImageProxy.toYuvImage(image: Image): YuvImage? {
 fun ImageProxy.toJpeg(compressionQuality: Int = 80): ByteBuffer? {
     val yuv = this.toYUV() ?: return null
     val stream = ByteArrayOutputStream()
-//    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
+    Log.d("hardik","Width ${this.width} Height ${this.height}")
+    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
     return ByteBuffer.wrap(stream.toByteArray())
 }
 
@@ -99,7 +101,7 @@ fun ByteArray.decodeToBitMap(): Bitmap? {
         if (image != null) {
             Log.d("Yes", "image != null")
             val stream = ByteArrayOutputStream()
-            image.compressToJpeg(Rect(0, 0, 640, 480), 50, stream)
+            image.compressToJpeg(Rect(0, 0, 640, 480), 80, stream)
             bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.toByteArray().size)
             stream.close()
         }
@@ -116,8 +118,13 @@ fun YuvImage.decodeToBitMap(image: YuvImage): Bitmap? {
         if (image != null) {
             Log.d("Yes", "image != null")
             val stream = ByteArrayOutputStream()
-            image.compressToJpeg(Rect(0, 0, image.width, image.height), 80, stream)
-            bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.toByteArray().size)
+            image.compressToJpeg(Rect(0, 0, 640, 480), 50, stream)
+//            Log.d("ram","${image.width} :: ${image.height} : ${stream.size()}")
+//            val inputStream = ByteArrayInputStream(stream.toByteArray())
+//            bmp = BitmapFactory.decodeStream(inputStream)
+            val options = BitmapFactory.Options()
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888
+            bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.toByteArray().size,options)
             stream.close()
         }
     } catch (ex: java.lang.Exception) {
@@ -140,11 +147,13 @@ fun YuvImage.convertYuvImageToBitmap(yuvImage: YuvImage): Bitmap? {
 
 fun Array<Image.Plane>.toNV21(width: Int, height: Int): ByteBuffer {
 
+
     val imageSize = width * height
     val out = ByteArray(imageSize + 2 * (imageSize / 4))
 
     if (BufferUtils.areUVPlanesNV21(this, width, height)) {
         // Copy the Y values.
+        Log.d("abhi","If in....");
         this[0].buffer.get(out, 0, imageSize)
         val uBuffer: ByteBuffer = this[1].buffer
         val vBuffer: ByteBuffer = this[2].buffer
@@ -153,6 +162,7 @@ fun Array<Image.Plane>.toNV21(width: Int, height: Int): ByteBuffer {
         // Copy the first U value and the remaining VU values from the U buffer.
         uBuffer[out, imageSize + 1, 2 * imageSize / 4 - 1]
     } else {
+        Log.d("abhi","If else....");
         // Fallback to copying the UV values one by one, which is slower but also works.
         // Unpack Y.
         BufferUtils.unpackPlane(this[0], width, height, out, 0, 1)
@@ -188,7 +198,7 @@ fun ImageProxy.toByteArray(): ByteArray {
     this.planes[2].buffer[out, imageSize, 1]
     // Copy the first U value and the remaining VU values from the U buffer.
     this.planes[1].buffer[out, imageSize + 1, 2 * imageSize / 4 - 1]
-    this.close()
+//    this.close()
     return out
 }
 

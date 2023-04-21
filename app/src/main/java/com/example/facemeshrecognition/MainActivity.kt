@@ -252,67 +252,10 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     try {
-
-//                        val img = image.getByteArray(image)
-//                        Log.d("sam", "${image.image!!.width} :: ${image!!.image!!.height}")
-//                        val img = image.image
                         val img = image.toJpeg()
-//                        val img = image.toYUV()
-
-
-//                        planeY.buffer = image.image!!.planes[0].buffer;
-//                        planeU.buffer = image.image!!.planes[1].buffer;
-//                        planeV.buffer = image.image!!.planes[2].buffer;
-//                        planeY.rowStride = image.image!!.planes[0].rowStride;
-//                        planeU.rowStride = image.image!!.planes[1].rowStride;
-//                        planeV.rowStride = image.image!!.planes[2].rowStride;
-//                        planeY.pixelStride = image.image!!.planes[0].pixelStride;
-//                        planeU.pixelStride = image.image!!.planes[1].pixelStride;
-//                        planeV.pixelStride = image.image!!.planes[2].pixelStride;
-
-//                        var y = image.image!!.planes[0].buffer;
-//                        var u = image.image!!.planes[1];
-//                        var v = image.image!!.planes[2];
-
-//                        val y = image.image!!.planes[0].buffer;
-//                        val u = image.image!!.planes[1].buffer;
-//                        val v = image.image!!.planes[2].buffer;
-//                        var planeListArray = arrayOf(y, u, v)
-
-
-//                        val buffer = image.planes[0].buffer
-//                        val bytes = ByteArray(buffer.remaining())
-//                        buffer.get(bytes)
-//                        CoroutineScope(Dispatchers.Main).launch {
-////                            var bitmap = BitmapFactory.decodeByteArray(bytes,0,bytes.size)
-//                            cameraView.setImageBitmap(bitmap)
-//                        }
-//                        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-
-
-//                        var plane : Array<Image.Plane> = image.image!!.planes;
-//                        val yuv = image.toYUV()
-//                        Log.d("test","Test ${image.width} ${image.height}");
-
-
-                        /**
-                         * Option 2
-                         */
-//                        var bitmapBuffer : Bitmap = Bitmap.createBitmap(image.width,image.height,Bitmap.Config.ARGB_8888);
-//                        bitmapBuffer.copyPixelsFromBuffer(image.image!!.planes[0].buffer);
-
-
-//                        val img = image.toYuvImage(image.image!!)
-//                        val img = image.toByteArray()
-
-//                        var base64value : String = Base64.encodeToString(img, Base64.DEFAULT);
 
                         CoroutineScope(Dispatchers.IO).launch {
-//                            val bitmapImage = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-//                            Log.d("hardik","Receive data");
-//                            val bmp = img.decodeToBitMap()
 
-//                            Log.d(TAG, "bytearray : $img")
                             cameraOut.send(
                                 img ?: throw Throwable("Couldn't get JPEG image")
                             )

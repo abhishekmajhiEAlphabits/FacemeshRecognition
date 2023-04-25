@@ -67,17 +67,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var frameLayout: FrameLayout
     private lateinit var btnStartScan: Button
 
-    private val cameraOut = Channel<ByteBuffer>(Channel.BUFFERED)
-    private val out: Flow<ByteBuffer> = cameraOut.receiveAsFlow()
+//    private val cameraOut = Channel<ByteBuffer>(Channel.BUFFERED)
+//    private val out: Flow<ByteBuffer> = cameraOut.receiveAsFlow()
 
-//    private val cameraOut = Channel<Array<ByteBuffer>>(Channel.BUFFERED)
-//    private val out: Flow<Array<ByteBuffer>> = cameraOut.receiveAsFlow()
+    private val cameraOut = Channel<ByteArray>(Channel.BUFFERED)
+    private val out: Flow<ByteArray> = cameraOut.receiveAsFlow()
     private var outStreamJob: Job? = null
     private val executor = Executors.newSingleThreadExecutor()
 
     private val imageAnalysisBuilder = ImageAnalysis.Builder()
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-//        .setTargetResolution(Size(640,480))
+//        .setTargetResolution(Size(1280,720))
 
     var frameCounter = 0
     var lastFpsTimestamp = System.currentTimeMillis()
@@ -107,22 +107,25 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        CoroutineScope(Dispatchers.Default).launch {
+        CoroutineScope(Dispatchers.IO).launch {
 
             outStreamJob?.cancel()
             outStreamJob = out.onEach { byteBuffer ->
 
-                val imageBytes = ByteArray(byteBuffer!!.remaining())
-                byteBuffer!!.get(imageBytes)
-                val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-//                val bmp = yuv.decodeToBitMap(yuv)
+//                val imageBytes = ByteArray(byteBuffer!!.remaining())
+//                byteBuffer!!.get(imageBytes)
+//                val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+
 //                val bmp = imageBytes.image
 //                Log.d(TAG,"byte : $imageBytes")
 //                setUpStreaming(bmp)
                 withContext(Dispatchers.Main) {
+                    val bmp = byteBuffer.decodeToBitMap()
+//                    val bmp = byteBuffer.decodeToBitMap(byteBuffer)
                     if (bmp != null) {
-                        setUpStreaming(bmp!!)
-//                    cameraView.setImageBitmap(bmp)
+//                        setUpStreaming(bmp!!)
+                        cameraView.setImageBitmap(bmp)
+                        cameraView.rotation = -90F
                     }
                 }
             }.launchIn(lifecycleScope)
@@ -252,7 +255,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     try {
-                        val img = image.toJpeg()
+                        val img = image.toNv21(image.image!!)
 
                         CoroutineScope(Dispatchers.IO).launch {
 

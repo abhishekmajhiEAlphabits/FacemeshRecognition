@@ -41,10 +41,10 @@ fun ImageProxy.toImage(): Image? {
     return image
 }
 
-fun Image.toBitmap(){
-    val imageBuffer = this.planes?.toNV21(this.width, this.height)
-//    Log.d("ram","$this.width :: $this.height")
-}
+//fun Image.toBitmap(){
+//    val imageBuffer = this.planes?.toNV21(this.width, this.height)
+////    Log.d("ram","$this.width :: $this.height")
+//}
 
 fun ImageProxy.toYuvImage(image: Image): YuvImage? {
     require(!(image.format !== ImageFormat.YUV_420_888)) { "Invalid image format" }
@@ -86,13 +86,13 @@ fun ImageProxy.toJpeg(compressionQuality: Int = 80): ByteBuffer? {
     return ByteBuffer.wrap(stream.toByteArray())
 }
 
-fun ImageProxy.toBitmap(compressionQuality: Int = 80): Bitmap? {
-//    val yuv = this.toYUV() ?: return null
-    val stream = ByteArrayOutputStream()
-//    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
-    val bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.size());
-    return bmp
-}
+//fun ImageProxy.toBitmap(compressionQuality: Int = 80): Bitmap? {
+////    val yuv = this.toYUV() ?: return null
+//    val stream = ByteArrayOutputStream()
+////    yuv.compressToJpeg(Rect(0, 0, this.width, this.height), compressionQuality, stream)
+//    val bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.size());
+//    return bmp
+//}
 
 fun ByteArray.decodeToBitMap(): Bitmap? {
     var bmp: Bitmap? = null
@@ -118,7 +118,7 @@ fun YuvImage.decodeToBitMap(image: YuvImage): Bitmap? {
         if (image != null) {
             Log.d("Yes", "image != null")
             val stream = ByteArrayOutputStream()
-            image.compressToJpeg(Rect(0, 0, 640, 480), 50, stream)
+            image.compressToJpeg(Rect(0, 0, this.width, this.height), 10, stream)
 //            Log.d("ram","${image.width} :: ${image.height} : ${stream.size()}")
 //            val inputStream = ByteArrayInputStream(stream.toByteArray())
 //            bmp = BitmapFactory.decodeStream(inputStream)
@@ -299,4 +299,51 @@ private fun unpackPlane(
         }
         rowStart += plane.rowStride
     }
+
+
+}
+
+fun ImageProxy.toNv21(image: Image): ByteArray? {
+    val width: Int = image.getWidth()
+    val height: Int = image.getHeight()
+
+    // Order of U/V channel guaranteed, read more:
+    // https://developer.android.com/reference/android/graphics/ImageFormat#YUV_420_888
+    val yPlane: Image.Plane = image.getPlanes().get(0)
+    val uPlane: Image.Plane = image.getPlanes().get(1)
+    val vPlane: Image.Plane = image.getPlanes().get(2)
+    val yBuffer = yPlane.buffer
+    val uBuffer = uPlane.buffer
+    val vBuffer = vPlane.buffer
+
+    // Full size Y channel and quarter size U+V channels.
+    val numPixels = (width * height * 1.5f).toInt()
+    val nv21 = ByteArray(numPixels)
+    var idY = 0
+    var idUV = width * height
+    val uvWidth = width / 2
+    val uvHeight = height / 2
+
+    // Copy Y & UV channel.
+    // NV21 format is expected to have YYYYVU packaging.
+    // The U/V planes are guaranteed to have the same row stride and pixel stride.
+    val uvRowStride = uPlane.rowStride
+    val uvPixelStride = uPlane.pixelStride
+    val yRowStride = yPlane.rowStride
+    val yPixelStride = yPlane.pixelStride
+    for (y in 0 until height) {
+        val yOffset = y * yRowStride
+        val uvOffset = y * uvRowStride
+        for (x in 0 until width) {
+            nv21[idY++] = yBuffer[yOffset + x * yPixelStride]
+            if (y < uvHeight && x < uvWidth) {
+                val bufferIndex = uvOffset + x * uvPixelStride
+                // V channel.
+                nv21[idUV++] = vBuffer[bufferIndex]
+                // U channel.
+                nv21[idUV++] = uBuffer[bufferIndex]
+            }
+        }
+    }
+    return nv21
 }

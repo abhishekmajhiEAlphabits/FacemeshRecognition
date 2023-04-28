@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.StreamConfigurationMap
+import android.media.Image
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -22,16 +23,12 @@ import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.mediapipe.components.TextureFrameConsumer
 import com.google.mediapipe.formats.proto.LandmarkProto
-import com.google.mediapipe.framework.TextureFrame
-import com.google.mediapipe.solutioncore.CameraInput
 import com.google.mediapipe.solutions.facemesh.FaceMesh
 import com.google.mediapipe.solutions.facemesh.FaceMeshOptions
 import com.google.mediapipe.solutions.facemesh.FaceMeshResult
@@ -44,19 +41,33 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import java.lang.Runnable
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 
 class MainActivity : AppCompatActivity() {
 
-//    private lateinit var planesObj: Planes
-//    private var cameraInput: CameraInput? = null
-//
-//    private lateinit var planeY: PlaneY
-//    private lateinit var planeU: PlaneU
-//    private lateinit var planeV: PlaneV
-//    private var iWidth: Int? = null
-//    private var iHeight: Int? = null
+    private var rgbBytes: IntArray? = null
+    private val yuvBytes = arrayOfNulls<ByteArray>(3)
+    private var yRowStride = 0
+    private var rgbFrameBitmap: Bitmap? = null
+    private var postInferenceCallback: Runnable? = null
+    private var imageConverter: Runnable? = null
+    private val previewWidth = 1920
+    private val previewHeight = 1080
+    private var cameraFPS: Float? = null;
 
+    val NUMBER_OF_CORES = Runtime.getRuntime().availableProcessors()
+    private var downloadThreadPool: ThreadPoolExecutor? = null
+    private var downaloadWorkQueue: LinkedBlockingQueue<Runnable>? = null
+
+    private val CORE_POOL_SIZE = NUMBER_OF_CORES * 100
+    private val MAX_POOL_SIZE = NUMBER_OF_CORES * 100
+    private val KEEP_ALIVE_TIME = 60L
+
+    val threadExecutor = Executors.newFixedThreadPool(100)
+    protected val dispatcher = provideDispatcher(nThreads = 10)
     private var facemesh: FaceMesh? = null
     private var imageView: FaceMeshResultImageView? = null
     private lateinit var cameraView: ImageView
@@ -77,9 +88,11 @@ class MainActivity : AppCompatActivity() {
 
     private val imageAnalysisBuilder = ImageAnalysis.Builder()
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-//        .setTargetResolution(Size(1280,720))
+        .setTargetResolution(Size(1080, 1920))
+//        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
 
     var frameCounter = 0
+    var toastCounter = 0
     var lastFpsTimestamp = System.currentTimeMillis()
     var array: ByteArray? = null
 
@@ -87,6 +100,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        rgbBytes = IntArray(previewWidth * previewHeight)
         imageView = FaceMeshResultImageView(applicationContext)
         frameLayout = findViewById<FrameLayout>(R.id.preview_display_layout)
         cameraView = findViewById(R.id.cameraImage)
@@ -107,34 +121,54 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.Default).launch {
 
             outStreamJob?.cancel()
             outStreamJob = out.onEach { byteBuffer ->
 
 //                val imageBytes = ByteArray(byteBuffer!!.remaining())
 //                byteBuffer!!.get(imageBytes)
-//                val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+//                val bmp = BitmapFactory.decodeByteArray(byteBuffer, 0, byteBuffer.size)
 
 //                val bmp = imageBytes.image
 //                Log.d(TAG,"byte : $imageBytes")
 //                setUpStreaming(bmp)
+//                val bmp = byteBuffer.decodeToBitMap()
+//                val worker = Runnable {
+//                    val bmp = byteBuffer.decodeToBitMap()
+////                    setUpStreaming(bmp!!)
+//                    CoroutineScope(Dispatchers.Default).launch {
+////                        cameraView.setImageBitmap(bmp)
+//
+//                    }
+//                }
+//                threadExecutor.execute(worker)
+//                threadExecutor.shutdown()
+//                executor.awaitTermination(1, TimeUnit.HOURS)
                 withContext(Dispatchers.Main) {
-                    val bmp = byteBuffer.decodeToBitMap()
+
 //                    val bmp = byteBuffer.decodeToBitMap(byteBuffer)
-                    if (bmp != null) {
-//                        setUpStreaming(bmp!!)
-                        cameraView.setImageBitmap(bmp)
-                        cameraView.rotation = -90F
-                    }
+//                        if (bmp != null) {
+////                        setUpStreaming(bmp!!)
+//
+////                        cameraView.rotation = -90F
+//                        }
                 }
             }.launchIn(lifecycleScope)
+
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
     private fun init() {
+        downaloadWorkQueue = LinkedBlockingQueue<Runnable>()
+
+        downloadThreadPool = ThreadPoolExecutor(
+            CORE_POOL_SIZE, MAX_POOL_SIZE,
+            KEEP_ALIVE_TIME, TimeUnit.SECONDS, downaloadWorkQueue
+        )
+
         processCameraProviderFuture = ProcessCameraProvider.getInstance(this)
         processCameraProvider = processCameraProviderFuture.get()
         setupCamera()
@@ -193,6 +227,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         val params = camera.cameraInfo
+//        val cameraParams: Camera.Parameters = camera.cameraInfo.
         val cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
 //        var size = getResolution(params, Quality.LOWEST);
 
@@ -225,6 +260,7 @@ class MainActivity : AppCompatActivity() {
                 CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
                 Range.create(60, 60)
             )
+
 //            .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
 //            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
 //            .setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
@@ -232,13 +268,13 @@ class MainActivity : AppCompatActivity() {
         camera2CameraControl.captureRequestOptions = captureRequestOptions
         CoroutineScope(Dispatchers.IO).launch {
             cameraPreviewCallBack(imageAnalysis)
+            imageAnalysis.clearAnalyzer()
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnsafeOptInUsageError")
     private fun cameraPreviewCallBack(imageAnalysis: ImageAnalysis) {
-        var imageUtil = Util()
         processCameraProviderFuture.addListener(Runnable {
             val frameCount = 30
             imageAnalysis.setAnalyzer(executor, ImageAnalysis.Analyzer { image ->
@@ -251,18 +287,74 @@ class MainActivity : AppCompatActivity() {
                         val delta = now - lastFpsTimestamp
                         val fps = 1000 * frameCount.toFloat() / delta
                         Log.d(TAG, "FPS: ${"%.02f".format(fps)}")
+                        cameraFPS = fps
                         lastFpsTimestamp = now
+                    }
+                    if (++toastCounter % 200 == 0) {
+                        toastCounter = 0
+                        runOnUiThread(Runnable {
+                            kotlin.run {
+                                Toast.makeText(
+                                    applicationContext,
+                                    "FPS : $cameraFPS",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        })
                     }
 
                     try {
-                        val img = image.toNv21(image.image!!)
+//                        val img = image.toNv21(image.image!!)
+                        val img = Util.YUV420toNV21(image.image)
 
-                        CoroutineScope(Dispatchers.IO).launch {
+//                        try {
+//                            val planes = image.image!!.planes
+//                            fillBytes(planes, yuvBytes)
+//                            yRowStride = planes[0].rowStride
+//                            val uvRowStride = planes[1].rowStride
+//                            val uvPixelStride = planes[1].pixelStride
+////                            imageConverter = Runnable {
+//                                image.convertYUV420ToARGB8888(
+//                                    yuvBytes[0]!!,
+//                                    yuvBytes[1]!!,
+//                                    yuvBytes[2]!!,
+//                                    previewWidth,
+//                                    previewHeight,
+//                                    yRowStride,
+//                                    uvRowStride,
+//                                    uvPixelStride,
+//                                    rgbBytes!!
+//                                )
+////                            }
+////                            postInferenceCallback = Runnable {
+//////                                image.close()
+//////                                isProcessingFrame = false
+////                            }
+////                            rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888)
+////                            rgbFrameBitmap?.setPixels(rgbBytes, 0, previewWidth, 0, 0, previewWidth, previewHeight)
+//                            CoroutineScope(Dispatchers.Main).launch {
+////                                cameraView.setImageBitmap(rgbFrameBitmap)
+//                            }
+//                        } catch (e: Exception) {
+//                            Log.d(TAG, "$e")
+//                        }
 
-                            cameraOut.send(
-                                img ?: throw Throwable("Couldn't get JPEG image")
-                            )
+                        val worker = Runnable {
+                            val bmp = img.decodeToBitMap()
+                            CoroutineScope(Dispatchers.Main).launch {
+                                cameraView.setImageBitmap(bmp)
+//                                setUpStreaming(bmp!!)
+                            }
                         }
+                        downloadThreadPool!!.execute(worker)
+                        CoroutineScope(Dispatchers.IO).launch {
+//                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+//                            cameraView.setImageBitmap(bmp)
+//                            cameraOut.send(
+//                                img ?: throw Throwable("Couldn't get JPEG image")
+//                            )
+                        }
+//                        }
 
                     } catch (t: Throwable) {
                         Log.e(TAG, "Error in getting Img : ${t.message}")
@@ -314,10 +406,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun setUpStreaming(bitmap: Bitmap) {
 
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.Main).launch {
 //
 //            val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
             val now = System.currentTimeMillis()
+//            val tsLong = System.currentTimeMillis() * 10
             facemesh!!.send(bitmap, now)
 
             //enable fps algorithm at one place only. else it will add the previous fps also and show incorrect fps.
@@ -370,5 +463,27 @@ class MainActivity : AppCompatActivity() {
 //        }
     }
 
+    protected fun fillBytes(
+        planes: Array<Image.Plane>,
+        yuvBytes: Array<ByteArray?>
+    ) {
+        // Because of the variable row stride it's not possible to know in
+        // advance the actual necessary dimensions of the yuv planes.
+        for (i in planes.indices) {
+            val buffer = planes[i].buffer
+            if (yuvBytes[i] == null) {
+                yuvBytes[i] = ByteArray(buffer.capacity())
+            }
+            buffer[yuvBytes[i]]
+        }
+    }
+
+    private fun processImage(): Bitmap? {
+        imageConverter!!.run()
+        rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888)
+        rgbFrameBitmap?.setPixels(rgbBytes, 0, previewWidth, 0, 0, previewWidth, previewHeight)
+        return rgbFrameBitmap
+//        postInferenceCallback!!.run()
+    }
 
 }

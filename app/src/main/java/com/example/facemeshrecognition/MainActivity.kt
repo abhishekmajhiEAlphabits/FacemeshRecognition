@@ -39,7 +39,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.lang.Runnable
-import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
@@ -57,6 +56,8 @@ class MainActivity : AppCompatActivity() {
     private val previewWidth = 1920
     private val previewHeight = 1080
     private var cameraFPS: Float? = null;
+    private var cameraWidth: Int? = null;
+    private var cameraHeight: Int? = null;
 
     val NUMBER_OF_CORES = Runtime.getRuntime().availableProcessors()
     private var downloadThreadPool: ThreadPoolExecutor? = null
@@ -194,6 +195,11 @@ class MainActivity : AppCompatActivity() {
                 })
             } catch (e: Exception) {
                 Log.d(TAG, "Face detection error : $e")
+//                runOnUiThread(Runnable {
+//                    kotlin.run {
+//                        Toast.makeText(applicationContext,"No Face Detected",Toast.LENGTH_SHORT).show()
+//                    }
+//                })
             }
         }
         frameLayout.removeAllViewsInLayout()
@@ -245,7 +251,17 @@ class MainActivity : AppCompatActivity() {
                 "Supported Size. Width: " + result.width.toString() + " height : " + result.height
             )
         }
-//        Log.d("abhi", "$sizes")
+        val fpsRange: Array<Range<Int>> = streamConfigurationMap.getHighSpeedVideoFpsRanges()
+        val fpsRanges: Array<out Range<Int>>? =
+            cameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+        for (i in 0 until fpsRanges!!.size) {
+            var result = fpsRanges[i]
+            Log.i(
+                "abhi",
+                "Supported FPS ranges : " + result.toString()
+            )
+        }
+//        Log.d("abhi", "$fpsRanges")
 
 
         val cameraControl = camera.cameraControl
@@ -288,6 +304,8 @@ class MainActivity : AppCompatActivity() {
                         val fps = 1000 * frameCount.toFloat() / delta
                         Log.d(TAG, "FPS: ${"%.02f".format(fps)}")
                         cameraFPS = fps
+                        cameraWidth = image.image!!.width
+                        cameraHeight = image!!.image!!.height
                         lastFpsTimestamp = now
                     }
                     if (++toastCounter % 200 == 0) {
@@ -296,7 +314,7 @@ class MainActivity : AppCompatActivity() {
                             kotlin.run {
                                 Toast.makeText(
                                     applicationContext,
-                                    "FPS : $cameraFPS",
+                                    "FPS : $cameraFPS Width : $cameraWidth Height : $cameraHeight",
                                     Toast.LENGTH_LONG
                                 ).show()
                             }

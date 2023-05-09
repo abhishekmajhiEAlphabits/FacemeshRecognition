@@ -103,7 +103,8 @@ fun ByteArray.decodeToBitMap(): Bitmap? {
             val stream = ByteArrayOutputStream()
             image.compressToJpeg(Rect(0, 0, 1920,1080), 80, stream)
             bmp = BitmapFactory.decodeByteArray(stream.toByteArray(), 0, stream.toByteArray().size)
-//            Log.d("hardik","Width ${image.width} Height ${image.height}")
+//            Log.d("abhi","Width ${image.width} Height ${image.height}")
+//            Log.d("abhi","inside bitmap")
             stream.close()
         }
     } catch (ex: java.lang.Exception) {

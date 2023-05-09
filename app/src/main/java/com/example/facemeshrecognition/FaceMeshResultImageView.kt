@@ -18,6 +18,8 @@ import javax.inject.Singleton
 @Singleton
 class FaceMeshResultImageView(context: Context?) : AppCompatImageView(context) {
     private lateinit var latest: Bitmap
+    var bitmapCounter = 0
+    var toastCounter = 0
 
     /**
      * Sets a [FaceMeshResult] to render.
@@ -40,133 +42,136 @@ class FaceMeshResultImageView(context: Context?) : AppCompatImageView(context) {
             result.multiFaceLandmarks()[0].landmarkList[107]
         val foreHead2: LandmarkProto.NormalizedLandmark =
             result.multiFaceLandmarks()[0].landmarkList[108]
-        val numFaces = result.multiFaceLandmarks().size
-        if (numFaces == null) {
-            CoroutineScope(Dispatchers.Main).launch {
-                Toast.makeText(context,"No Face Detected",Toast.LENGTH_LONG).show()
+        if (++bitmapCounter % 2 == 0) {
+            val numFaces = result.multiFaceLandmarks().size
+            if (numFaces == null) {
+                CoroutineScope(Dispatchers.Main).launch {
+                    Toast.makeText(context,"No Face Detected",Toast.LENGTH_LONG).show()
+                }
+            }
+            for (i in 0 until numFaces) {
+                drawLandmarks(
+                    canvas,
+                    result.multiFaceLandmarks()[i].landmarkList,
+                    Roi.foreHead,
+                    imageSize,
+                    FACE_OVAL_COLOR,
+                    FACE_OVAL_THICKNESS
+                )
+                drawLandmarks(
+                    canvas,
+                    result.multiFaceLandmarks()[i].landmarkList,
+                    Roi.leftCheek,
+                    imageSize,
+                    FACE_OVAL_COLOR,
+                    FACE_OVAL_THICKNESS
+                )
+                drawLandmarks(
+                    canvas,
+                    result.multiFaceLandmarks()[i].landmarkList,
+                    Roi.rightCheek,
+                    imageSize,
+                    FACE_OVAL_COLOR,
+                    FACE_OVAL_THICKNESS
+                )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_TESSELATION,
+////                imageSize,
+////                TESSELATION_COLOR,
+////                TESSELATION_THICKNESS
+////            )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_RIGHT_EYE,
+////                imageSize,
+////                RIGHT_EYE_COLOR,
+////                RIGHT_EYE_THICKNESS
+////            )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_RIGHT_EYEBROW,
+////                imageSize,
+////                RIGHT_EYEBROW_COLOR,
+////                RIGHT_EYEBROW_THICKNESS
+////            )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_LEFT_EYE,
+////                imageSize,
+////                LEFT_EYE_COLOR,
+////                LEFT_EYE_THICKNESS
+////            )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_LEFT_EYEBROW,
+////                imageSize,
+////                LEFT_EYEBROW_COLOR,
+////                LEFT_EYEBROW_THICKNESS
+////            )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_FACE_OVAL,
+////                imageSize,
+////                FACE_OVAL_COLOR,
+////                FACE_OVAL_THICKNESS
+////            )
+////            drawLandmarksOnCanvas(
+////                canvas,
+////                result.multiFaceLandmarks()[i].landmarkList,
+////                FaceMeshConnections.FACEMESH_LIPS,
+////                imageSize,
+////                LIPS_COLOR,
+////                LIPS_THICKNESS
+////            )
+////            if (result.multiFaceLandmarks()[i].landmarkCount
+////                == FaceMesh.FACEMESH_NUM_LANDMARKS_WITH_IRISES
+////            ) {
+////                drawLandmarksOnCanvas(
+////                    canvas,
+////                    result.multiFaceLandmarks()[i].landmarkList,
+////                    FaceMeshConnections.FACEMESH_RIGHT_IRIS,
+////                    imageSize,
+////                    RIGHT_EYE_COLOR,
+////                    RIGHT_EYE_THICKNESS
+////                )
+////                drawLandmarksOnCanvas(
+////                    canvas,
+////                    result.multiFaceLandmarks()[i].landmarkList,
+////                    FaceMeshConnections.FACEMESH_LEFT_IRIS,
+////                    imageSize,
+////                    LEFT_EYE_COLOR,
+////                    LEFT_EYE_THICKNESS
+////                )
+////            }
+//
+////            val connectionPaint = Paint()
+////            var col = Color.parseColor("#FF3030")
+////            connectionPaint.setColor(col)
+////            connectionPaint.setStrokeWidth(2f)
+////            canvas.drawLine(
+////                foreHead1.x * imageSize.width,
+////                foreHead1.y * imageSize.height,
+////                foreHead2.x * imageSize.width,
+////                foreHead2.y * imageSize.height,
+////                connectionPaint
+////            )
+////            canvas.drawLine(
+////                foreHead3.x * imageSize.width,
+////                foreHead3.y * imageSize.height,
+////                foreHead4.x * imageSize.width,
+////                foreHead4.y * imageSize.height,
+////                connectionPaint
+////            )
             }
         }
-        for (i in 0 until numFaces) {
-            drawLandmarks(
-                canvas,
-                result.multiFaceLandmarks()[i].landmarkList,
-                Roi.foreHead,
-                imageSize,
-                FACE_OVAL_COLOR,
-                FACE_OVAL_THICKNESS
-            )
-            drawLandmarks(
-                canvas,
-                result.multiFaceLandmarks()[i].landmarkList,
-                Roi.leftCheek,
-                imageSize,
-                FACE_OVAL_COLOR,
-                FACE_OVAL_THICKNESS
-            )
-            drawLandmarks(
-                canvas,
-                result.multiFaceLandmarks()[i].landmarkList,
-                Roi.rightCheek,
-                imageSize,
-                FACE_OVAL_COLOR,
-                FACE_OVAL_THICKNESS
-            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_TESSELATION,
-//                imageSize,
-//                TESSELATION_COLOR,
-//                TESSELATION_THICKNESS
-//            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_RIGHT_EYE,
-//                imageSize,
-//                RIGHT_EYE_COLOR,
-//                RIGHT_EYE_THICKNESS
-//            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_RIGHT_EYEBROW,
-//                imageSize,
-//                RIGHT_EYEBROW_COLOR,
-//                RIGHT_EYEBROW_THICKNESS
-//            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_LEFT_EYE,
-//                imageSize,
-//                LEFT_EYE_COLOR,
-//                LEFT_EYE_THICKNESS
-//            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_LEFT_EYEBROW,
-//                imageSize,
-//                LEFT_EYEBROW_COLOR,
-//                LEFT_EYEBROW_THICKNESS
-//            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_FACE_OVAL,
-//                imageSize,
-//                FACE_OVAL_COLOR,
-//                FACE_OVAL_THICKNESS
-//            )
-//            drawLandmarksOnCanvas(
-//                canvas,
-//                result.multiFaceLandmarks()[i].landmarkList,
-//                FaceMeshConnections.FACEMESH_LIPS,
-//                imageSize,
-//                LIPS_COLOR,
-//                LIPS_THICKNESS
-//            )
-//            if (result.multiFaceLandmarks()[i].landmarkCount
-//                == FaceMesh.FACEMESH_NUM_LANDMARKS_WITH_IRISES
-//            ) {
-//                drawLandmarksOnCanvas(
-//                    canvas,
-//                    result.multiFaceLandmarks()[i].landmarkList,
-//                    FaceMeshConnections.FACEMESH_RIGHT_IRIS,
-//                    imageSize,
-//                    RIGHT_EYE_COLOR,
-//                    RIGHT_EYE_THICKNESS
-//                )
-//                drawLandmarksOnCanvas(
-//                    canvas,
-//                    result.multiFaceLandmarks()[i].landmarkList,
-//                    FaceMeshConnections.FACEMESH_LEFT_IRIS,
-//                    imageSize,
-//                    LEFT_EYE_COLOR,
-//                    LEFT_EYE_THICKNESS
-//                )
-//            }
 
-//            val connectionPaint = Paint()
-//            var col = Color.parseColor("#FF3030")
-//            connectionPaint.setColor(col)
-//            connectionPaint.setStrokeWidth(2f)
-//            canvas.drawLine(
-//                foreHead1.x * imageSize.width,
-//                foreHead1.y * imageSize.height,
-//                foreHead2.x * imageSize.width,
-//                foreHead2.y * imageSize.height,
-//                connectionPaint
-//            )
-//            canvas.drawLine(
-//                foreHead3.x * imageSize.width,
-//                foreHead3.y * imageSize.height,
-//                foreHead4.x * imageSize.width,
-//                foreHead4.y * imageSize.height,
-//                connectionPaint
-//            )
-        }
     }
 
     /** Updates the image view with the latest [FaceMeshResult].  */
@@ -174,6 +179,12 @@ class FaceMeshResultImageView(context: Context?) : AppCompatImageView(context) {
         postInvalidate()
         if (latest != null) {
             setImageBitmap(latest)
+        }
+    }
+
+    fun updateBmp(bitmap: Bitmap) {
+        if (bitmap != null) {
+            setImageBitmap(bitmap)
         }
     }
 
